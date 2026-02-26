@@ -4,7 +4,7 @@ session_start();
 // ============================================================
 // MODO DEBUG: Cambia a false cuando todo funcione
 // ============================================================
-$debug = true;
+$debug = false; // Cambiado a false para producción
 
 include("../config/conexion.php");
 
@@ -33,11 +33,14 @@ $uid = intval($_SESSION["user_id"]);
 $perfil       = null;
 $queryError = null;
 
-$sql = "SELECT u.id, u.nombre, u.apodo, u.email, u.rol, u.sede_id,
+// Modificada la consulta para incluir el rol personalizado
+$sql = "SELECT u.id, u.nombre, u.apodo, u.email, u.rol, u.rol_id, u.sede_id,
                u.avatar, u.fecha_registro, u.codigo_biometrico,
-               s.nombre AS sede_nombre
+               s.nombre AS sede_nombre,
+               r.nombre AS rol_personalizado_nombre
         FROM usuarios u
         LEFT JOIN sedes s ON u.sede_id = s.id
+        LEFT JOIN roles r ON u.rol_id = r.id
         WHERE u.id = ?";
 
 $stmt = $conn->prepare($sql);
@@ -95,7 +98,55 @@ $avatar  = !empty($perfil['avatar']) ? $perfil['avatar'] : 'default.png';
 $mensaje = $_SESSION['mensaje'] ?? '';
 $error   = $_SESSION['error']   ?? '';
 unset($_SESSION['mensaje'], $_SESSION['error']);
+
+// Función para determinar el badge del rol según el tipo
+function getRolBadge($perfil) {
+    // Si tiene rol personalizado
+    if (!empty($perfil['rol_personalizado_nombre'])) {
+        $rol_nombre = $perfil['rol_personalizado_nombre'];
+        
+        // Asignar color según el tipo de rol personalizado
+        if (stripos($rol_nombre, 'enfermer') !== false || stripos($rol_nombre, 'enfermera') !== false || stripos($rol_nombre, 'enfermero') !== false) {
+            return '<span class="badge-role" style="background: linear-gradient(135deg, #4aa3df 0%, #2c7abe 100%);">
+                        <i class="bi bi-heart-pulse me-1"></i>' . htmlspecialchars($rol_nombre) . '
+                    </span>';
+        } elseif (stripos($rol_nombre, 'limpieza') !== false || stripos($rol_nombre, 'aseo') !== false || stripos($rol_nombre, 'mantenimiento') !== false) {
+            return '<span class="badge-role" style="background: linear-gradient(135deg, #9aa9b9 0%, #6c7a8d 100%);">
+                        <i class="bi bi-brush me-1"></i>' . htmlspecialchars($rol_nombre) . '
+                    </span>';
+        } elseif (stripos($rol_nombre, 'medico') !== false || stripos($rol_nombre, 'médico') !== false || stripos($rol_nombre, 'doctor') !== false) {
+            return '<span class="badge-role" style="background: linear-gradient(135deg, #38b2ac 0%, #2c7a7b 100%);">
+                        <i class="bi bi-hospital me-1"></i>' . htmlspecialchars($rol_nombre) . '
+                    </span>';
+        } elseif (stripos($rol_nombre, 'administrativo') !== false || stripos($rol_nombre, 'secretaria') !== false || stripos($rol_nombre, 'recepcion') !== false) {
+            return '<span class="badge-role" style="background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);">
+                        <i class="bi bi-file-text me-1"></i>' . htmlspecialchars($rol_nombre) . '
+                    </span>';
+        } elseif (stripos($rol_nombre, 'seguridad') !== false || stripos($rol_nombre, 'vigilante') !== false) {
+            return '<span class="badge-role" style="background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);">
+                        <i class="bi bi-shield me-1"></i>' . htmlspecialchars($rol_nombre) . '
+                    </span>';
+        } else {
+            // Color genérico para roles personalizados no categorizados
+            return '<span class="badge-role" style="background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%);">
+                        <i class="bi bi-star-fill me-1"></i>' . htmlspecialchars($rol_nombre) . '
+                    </span>';
+        }
+    } else {
+        // Roles del sistema
+        if ($perfil['rol'] === 'admin') {
+            return '<span class="badge-role badge-admin">
+                        <i class="bi bi-shield-lock me-1"></i>Administrador
+                    </span>';
+        } else {
+            return '<span class="badge-role" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);">
+                        <i class="bi bi-person me-1"></i>Usuario
+                    </span>';
+        }
+    }
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -162,8 +213,8 @@ unset($_SESSION['mensaje'], $_SESSION['error']);
         .info-label { font-weight: 600; color: #4a5568; min-width: 100px; }
         .info-value { color: #2d3748; font-weight: 500; }
         .badge-role {
-            background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
-            color: white; padding: 4px 12px; border-radius: 20px; font-size: .8rem; font-weight: 500;
+            padding: 5px 12px; border-radius: 20px; font-size: .85rem; font-weight: 500;
+            display: inline-flex; align-items: center; color: white;
         }
         .badge-admin { background: linear-gradient(135deg, #fc8181 0%, #f56565 100%); }
         .section-title { font-size: 1.2rem; font-weight: 600; color: #2d3748; margin: 30px 0 20px; display: flex; align-items: center; }
@@ -188,6 +239,19 @@ unset($_SESSION['mensaje'], $_SESSION['error']);
         .disc-stat-value { font-size: 1.5rem; font-weight: 700; color: #667eea; }
         .disc-stat-label { font-size: .8rem; color: #718096; text-transform: uppercase; letter-spacing: .5px; }
         .alert { border-radius: 12px; border: none; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+        
+        /* Estilos específicos para badges de roles personalizados */
+        .rol-info-card {
+            background: #f0f4fa;
+            border-radius: 12px;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+        .rol-info-card i {
+            color: #667eea;
+            margin-right: 8px;
+        }
     </style>
 </head>
 <body>
@@ -267,11 +331,36 @@ unset($_SESSION['mensaje'], $_SESSION['error']);
                             <div class="info-icon"><i class="bi bi-shield"></i></div>
                             <span class="info-label">Rol:</span>
                             <span class="info-value">
-                                <span class="badge-role <?= ($perfil['rol'] ?? '') === 'admin' ? 'badge-admin' : '' ?>">
-                                    <?= ($perfil['rol'] ?? '') === 'admin' ? 'Administrador' : 'Usuario' ?>
-                                </span>
+                                <?= getRolBadge($perfil) ?>
                             </span>
                         </div>
+                        
+                        <?php if (!empty($perfil['rol_personalizado_nombre'])): ?>
+                        <!-- Información adicional del rol personalizado -->
+                        <div class="rol-info-card mt-3">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-info-circle-fill fs-5"></i>
+                                <div>
+                                    <small class="text-muted d-block">Tipo de rol personalizado</small>
+                                    <span class="fw-semibold">
+                                        <?php 
+                                        if (stripos($perfil['rol_personalizado_nombre'], 'enfermer') !== false) {
+                                            echo '<i class="bi bi-heart-pulse me-1 text-danger"></i> Personal de Enfermería';
+                                        } elseif (stripos($perfil['rol_personalizado_nombre'], 'limpieza') !== false) {
+                                            echo '<i class="bi bi-brush me-1 text-secondary"></i> Personal de Limpieza';
+                                        } elseif (stripos($perfil['rol_personalizado_nombre'], 'medico') !== false || stripos($perfil['rol_personalizado_nombre'], 'médico') !== false) {
+                                            echo '<i class="bi bi-hospital me-1 text-teal"></i> Personal Médico';
+                                        } elseif (stripos($perfil['rol_personalizado_nombre'], 'seguridad') !== false) {
+                                            echo '<i class="bi bi-shield me-1 text-dark"></i> Personal de Seguridad';
+                                        } else {
+                                            echo '<i class="bi bi-star-fill me-1 text-purple"></i> Rol Personalizado';
+                                        }
+                                        ?>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 

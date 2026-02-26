@@ -122,12 +122,12 @@ $avatar_url = getAvatarPersonal($usuario)
            ?? '/asistencia-main/assets/img/default.png';
 
 if (!file_exists($_SERVER['DOCUMENT_ROOT'] . $avatar_url)) {
-    $avatar_url = "https://via.placeholder.com/150/667eea/ffffff?text=" . urlencode(substr($usuario['nombre'], 0, 1));
+    $avatar_url = '/asistencia-main/assets/img/default.png';
 }
 
 // ✅ Imagen del nivel (separada del avatar)
 $nivel_img_url = getImagenNivel($imagen_nivel, $nivel)
-              ?? "https://via.placeholder.com/300/667eea/ffffff?text=Nivel+$nivel";
+              ?? '/asistencia-main/assets/img/default.png';
 
 // ✅ Datos completos del nivel para el modal
 $nivel_modal = [
@@ -190,6 +190,8 @@ $recompensas = $conn->query("SELECT * FROM recompensas WHERE activo=1 AND stock>
     <style>
         * { font-family: 'Inter', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #f8f9fc; }
+        .main-content { margin-left: 260px; padding: 30px; min-height: 100vh; }
+        @media (max-width: 768px) { .main-content { margin-left: 0; padding: 20px; } }
         .page-title { font-weight: 700; color: #2d3748; position: relative; padding-bottom: .75rem; margin-bottom: 2rem; }
         .page-title:after { content: ''; position: absolute; bottom: 0; left: 0; width: 60px; height: 4px; background: linear-gradient(135deg,#667eea,#764ba2); border-radius: 2px; }
         .profile-card { background: linear-gradient(135deg,#667eea,#764ba2); border-radius: 20px; padding: 30px; color: white; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(102,126,234,.3); position: relative; overflow: hidden; }
@@ -262,6 +264,8 @@ $recompensas = $conn->query("SELECT * FROM recompensas WHERE activo=1 AND stock>
 </head>
 <body>
 
+<?php include(__DIR__ . "/sidebar.php"); ?>
+
 <main class="main-content">
     <div class="container-fluid">
         <h1 class="page-title">
@@ -288,7 +292,7 @@ $recompensas = $conn->query("SELECT * FROM recompensas WHERE activo=1 AND stock>
                         <img src="<?= $avatar_url ?>" alt="Avatar" class="profile-avatar me-4"
                              onclick="verImagenAmpliada('<?= $avatar_url ?>', '<?= htmlspecialchars($usuario['nombre']) ?>')"
                              title="Ver imagen ampliada"
-                             onerror="this.src='https://via.placeholder.com/150/667eea/ffffff?text=<?= urlencode(substr($usuario['nombre'],0,1)) ?>'">
+                             onerror="this.src='/asistencia-main/assets/img/default.png'; this.onerror=null;">
                         <div>
                             <h2 class="profile-name"><?= htmlspecialchars($usuario['nombre']) ?></h2>
                             <span class="profile-role">
@@ -410,11 +414,21 @@ $recompensas = $conn->query("SELECT * FROM recompensas WHERE activo=1 AND stock>
                     <div class="card-body p-0">
                         <?php if ($recompensas && $recompensas->num_rows > 0): ?>
                             <?php while ($r = $recompensas->fetch_assoc()): ?>
-                                <?php $ri = !empty($r['imagen']) ? '/asistencia-main/assets/img/recompensas/'.$r['imagen'] : 'https://via.placeholder.com/80/667eea/ffffff?text=G'; ?>
+                                <?php 
+                                    // Para cada recompensa, construir la ruta correcta de la imagen
+                                    if (!empty($r['imagen'])) {
+                                        // Si la imagen ya tiene la carpeta 'uploads/', la quitamos
+                                        $nombre_imagen = str_replace('uploads/', '', $r['imagen']);
+                                        $ri = '/asistencia-main/assets/img/recompensas/' . $nombre_imagen;
+                                    } else {
+                                        $ri = '/asistencia-main/assets/img/default.png';
+                                    }
+                                    ?>
+                            
                                 <div class="reward-card">
                                     <img src="<?= $ri ?>" alt="<?= htmlspecialchars($r['nombre']) ?>" class="reward-image"
                                          onclick="verImagenAmpliada('<?= $ri ?>','<?= htmlspecialchars($r['nombre']) ?>')"
-                                         onerror="this.src='https://via.placeholder.com/80/667eea/ffffff?text=G'">
+                                         onerror="this.src='/asistencia-main/assets/img/default.png'; this.onerror=null;">
                                     <h6 class="reward-name"><?= htmlspecialchars($r['nombre']) ?></h6>
                                     <div class="reward-points"><i class="bi bi-star-fill"></i><?= number_format($r['costo']) ?> pts</div>
                                     <a href="../tienda/index.php" class="btn btn-sm btn-outline-primary">Canjear</a>
@@ -450,7 +464,7 @@ $recompensas = $conn->query("SELECT * FROM recompensas WHERE activo=1 AND stock>
             <div class="modal-body text-center">
                 <!-- Imagen del nivel desde BD -->
                 <img id="nivelModalImg" src="" alt="Imagen del nivel" class="nivel-modal-img"
-                     onerror="this.src='https://via.placeholder.com/160/667eea/ffffff?text=Nivel'">
+                     onerror="this.src='/asistencia-main/assets/img/default.png'; this.onerror=null;">
 
                 <div id="nivelModalNumero" class="nivel-numero-badge mb-2"></div>
                 <div id="nivelModalNombre" class="nivel-nombre"></div>

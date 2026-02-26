@@ -11,23 +11,29 @@ if (!isset($_SESSION["rol"]) || $_SESSION["rol"] !== "admin") {
 // Filtros
 $sede_id = isset($_GET['sede']) ? intval($_GET['sede']) : '';
 $busqueda = isset($_GET['q']) ? trim($_GET['q']) : '';
+$rol_id = isset($_GET['rol']) ? intval($_GET['rol']) : '';
 
 // Obtener sedes activas
 $sedesRes = $conn->query("SELECT id, nombre FROM sedes WHERE activo = 1 ORDER BY nombre");
+
+// Obtener roles personalizados
+$rolesRes = $conn->query("SELECT id, nombre FROM roles ORDER BY nombre");
 
 // Verificar si la consulta de sedes fue exitosa
 if (!$sedesRes) {
     die("Error al cargar sedes: " . $conn->error);
 }
 
-// Construir query de usuarios con prepared statements
+// Construir query de usuarios con prepared statements - INCLUYENDO ROLES PERSONALIZADOS
 $sql = "
     SELECT u.id, u.nombre, u.email, u.rol, u.avatar, u.fecha_registro,
            s.nombre AS sede, s.id as sede_id,
-           COALESCE(p.total, 0) as puntos
+           COALESCE(p.total, 0) as puntos,
+           r.nombre as rol_personalizado
     FROM usuarios u
     LEFT JOIN sedes s ON s.id = u.sede_id
     LEFT JOIN puntos p ON p.usuario_id = u.id
+    LEFT JOIN roles r ON r.id = u.rol_id
     WHERE 1=1
 ";
 
@@ -37,6 +43,12 @@ $types = "";
 if ($sede_id !== '') {
     $sql .= " AND u.sede_id = ?";
     $params[] = $sede_id;
+    $types .= "i";
+}
+
+if ($rol_id !== '') {
+    $sql .= " AND u.rol_id = ?";
+    $params[] = $rol_id;
     $types .= "i";
 }
 
@@ -92,17 +104,24 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             min-height: 100vh;
         }
         
-        .contenido {
+        .main-content {
             flex: 1;
             margin-left: 260px;
             padding: 30px;
             background: linear-gradient(135deg, #f5f7fa 0%, #f8f9fc 100%);
+            min-height: 100vh;
+        }
+        
+        @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
+            }
         }
         
         @media (max-width: 768px) {
-            .contenido {
-                margin-left: 0;
-                padding: 20px;
+            .main-content {
+                padding: 15px;
             }
         }
         
@@ -115,6 +134,8 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
         }
         
         .page-title:after {
@@ -137,6 +158,14 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             display: flex;
             align-items: center;
             gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        @media (max-width: 480px) {
+            .stats-card {
+                justify-content: center;
+                text-align: center;
+            }
         }
         
         .stats-icon {
@@ -179,6 +208,22 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             gap: 15px;
             align-items: center;
             flex-wrap: wrap;
+        }
+        
+        @media (max-width: 768px) {
+            .filters-form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .filters-form .flex-grow-1 {
+                width: 100%;
+            }
+            
+            .filters-form .btn,
+            .filters-form a {
+                width: 100%;
+            }
         }
         
         .filters-form .form-control,
@@ -227,15 +272,31 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             box-shadow: 0 6px 20px rgba(72, 187, 120, 0.4);
         }
         
+        .btn-outline-secondary {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 10px 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-outline-secondary:hover {
+            background: #e2e8f0;
+            border-color: #cbd5e0;
+            transform: translateY(-2px);
+        }
+        
         .table-container {
             background: white;
             border-radius: 15px;
             padding: 20px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+            overflow-x: auto;
         }
         
         .table {
             margin: 0;
+            min-width: 1000px;
         }
         
         .table thead th {
@@ -273,6 +334,7 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             border-radius: 20px;
             font-size: 0.8rem;
             font-weight: 500;
+            display: inline-block;
         }
         
         .badge-admin {
@@ -285,6 +347,11 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             color: white;
         }
         
+        .badge-rol-personalizado {
+            background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%);
+            color: white;
+        }
+        
         .points-badge {
             background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
             color: white;
@@ -292,6 +359,7 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             border-radius: 15px;
             font-size: 0.8rem;
             font-weight: 600;
+            white-space: nowrap;
         }
         
         .action-btn {
@@ -355,22 +423,46 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
         }
         
         /* DataTables custom */
+        .dataTables_wrapper {
+            overflow-x: auto;
+        }
+        
         .dataTables_wrapper .dataTables_length select,
         .dataTables_wrapper .dataTables_filter input {
             border: 2px solid #e2e8f0;
             border-radius: 10px;
             padding: 8px 12px;
+            margin: 0 5px;
         }
         
         .dataTables_wrapper .dataTables_paginate .paginate_button {
             border-radius: 10px;
             padding: 8px 12px;
+            margin: 0 2px;
         }
         
         .dataTables_wrapper .dataTables_paginate .paginate_button.current {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
             color: white !important;
+        }
+        
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            background: #e2e8f0;
+            border-color: #cbd5e0;
+        }
+        
+        @media (max-width: 768px) {
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_filter {
+                text-align: left;
+                margin-bottom: 10px;
+            }
+            
+            .dataTables_wrapper .dataTables_filter input {
+                width: 100%;
+                margin-left: 0;
+            }
         }
     </style>
 </head>
@@ -379,16 +471,21 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
     <?php include(__DIR__ . "/../dashboard/sidebar.php"); ?>
 
     <main class="main-content">
-        <div class="container-fluid">
+        <div class="container-fluid px-lg-4">
             <!-- Título y botón nuevo -->
             <div class="page-title">
                 <h1 class="mb-0">
                     <i class="bi bi-people-fill me-2" style="color: #667eea;"></i>
                     Gestión de Usuarios
                 </h1>
-                <a href="usuario_crear.php" class="btn btn-success">
-                    <i class="bi bi-plus-circle me-2"></i>Nuevo Usuario
-                </a>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="roles.php" class="btn btn-outline-primary">
+                        <i class="bi bi-person-badge me-2"></i>Roles
+                    </a>
+                    <a href="usuario_crear.php" class="btn btn-success">
+                        <i class="bi bi-plus-circle me-2"></i>Nuevo Usuario
+                    </a>
+                </div>
             </div>
 
             <!-- Tarjeta de estadísticas -->
@@ -417,13 +514,37 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
                         <select name="sede" class="form-select">
                             <option value="">Todas las sedes</option>
                             <?php 
-                            $sedesRes->data_seek(0);
-                            while($s = $sedesRes->fetch_assoc()): 
+                            if ($sedesRes && $sedesRes->num_rows > 0) {
+                                $sedesRes->data_seek(0);
+                                while($s = $sedesRes->fetch_assoc()): 
                             ?>
                                 <option value="<?= $s['id'] ?>" <?= $sede_id == $s['id'] ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($s['nombre']) ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php 
+                                endwhile;
+                            } 
+                            ?>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <select name="rol" class="form-select">
+                            <option value="">Todos los roles</option>
+                            <option value="admin" <?= $rol_id === 'admin' ? 'selected' : '' ?>>Administrador (sistema)</option>
+                            <option value="usuario" <?= $rol_id === 'usuario' ? 'selected' : '' ?>>Usuario (sistema)</option>
+                            <?php 
+                            if ($rolesRes && $rolesRes->num_rows > 0) {
+                                $rolesRes->data_seek(0);
+                                while($r = $rolesRes->fetch_assoc()): 
+                            ?>
+                                <option value="rol_<?= $r['id'] ?>" <?= $rol_id == 'rol_' . $r['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($r['nombre']) ?> (personalizado)
+                                </option>
+                            <?php 
+                                endwhile;
+                            } 
+                            ?>
                         </select>
                     </div>
 
@@ -481,10 +602,17 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <span class="badge-role <?= $u['rol'] === 'admin' ? 'badge-admin' : 'badge-user' ?>">
-                                            <i class="bi <?= $u['rol'] === 'admin' ? 'bi-shield-lock' : 'bi-person' ?> me-1"></i>
-                                            <?= $u['rol'] === 'admin' ? 'Admin' : 'Usuario' ?>
-                                        </span>
+                                        <?php if (!empty($u['rol_personalizado'])): ?>
+                                            <span class="badge-role badge-rol-personalizado">
+                                                <i class="bi bi-person-badge me-1"></i>
+                                                <?= htmlspecialchars($u['rol_personalizado']) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="badge-role <?= $u['rol'] === 'admin' ? 'badge-admin' : 'badge-user' ?>">
+                                                <i class="bi <?= $u['rol'] === 'admin' ? 'bi-shield-lock' : 'bi-person' ?> me-1"></i>
+                                                <?= $u['rol'] === 'admin' ? 'Admin' : 'Usuario' ?>
+                                            </span>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <span class="points-badge">
@@ -527,7 +655,6 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
             </div>
         </div>
     </main>
-</div>
 
 <!-- Scripts -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
@@ -536,19 +663,51 @@ $total_usuarios = $conn->query("SELECT COUNT(*) as total FROM usuarios")->fetch_
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
+// Configuración de idioma para DataTables (español)
+const spanishLanguage = {
+    "processing": "Procesando...",
+    "lengthMenu": "Mostrar _MENU_ registros",
+    "zeroRecords": "No se encontraron resultados",
+    "emptyTable": "Ningún dato disponible en esta tabla",
+    "info": "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
+    "infoEmpty": "Mostrando registros del 0 al 0 de un total de 0 registros",
+    "infoFiltered": "(filtrado de un total de _MAX_ registros)",
+    "search": "Buscar:",
+    "paginate": {
+        "first": "Primero",
+        "last": "Último",
+        "next": "Siguiente",
+        "previous": "Anterior"
+    }
+};
+
 $(document).ready(function() {
-    // Inicializar DataTable
-    $('#tablaUsuarios').DataTable({
-        language: {
-            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json'
-        },
-        pageLength: 10,
-        order: [[0, 'desc']],
-        columnDefs: [
-            { orderable: false, targets: [1, 7] } // No ordenar columnas de avatar y acciones
-        ]
-    });
+    // Verificar si la tabla existe antes de inicializar DataTable
+    if ($('#tablaUsuarios').length > 0 && $('#tablaUsuarios tbody tr').length > 1) {
+        $('#tablaUsuarios').DataTable({
+            language: spanishLanguage,
+            pageLength: 10,
+            order: [[0, 'desc']],
+            columnDefs: [
+                { orderable: false, targets: [1, 7] }, // No ordenar columnas de avatar y acciones
+                { type: 'num', targets: [0, 6] } // Orden numérico para ID y puntos
+            ],
+            responsive: true,
+            autoWidth: false,
+            scrollX: true
+        });
+    } else if ($('#tablaUsuarios').length > 0) {
+        // Si no hay suficientes datos, aún así aplicar estilos básicos
+        console.log('Tabla con pocos datos, DataTable no inicializado');
+    }
 });
+
+// Función para confirmar eliminación (respaldo)
+function confirmarEliminacion(event, nombre) {
+    if (!confirm('¿Estás seguro de eliminar a ' + nombre + '? Esta acción no se puede deshacer.')) {
+        event.preventDefault();
+    }
+}
 </script>
 
 </body>

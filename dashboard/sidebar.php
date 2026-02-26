@@ -14,18 +14,23 @@ if (!isset($conn) || !$conn) {
 // Obtener sedes activas con manejo de errores
 $sidebar_sedes = $conn->query("SELECT id, nombre FROM sedes WHERE activo = 1 ORDER BY nombre");
 
-
+// Verificar si la consulta fue exitosa
+if (!$sidebar_sedes) {
+    $sidebar_sedes = false;
+    error_log("Error en sidebar.php al obtener sedes: " . $conn->error);
+}
 
 // Obtener información del usuario actual
 $usuario_nombre = $_SESSION['nombre'] ?? 'Usuario';
 $usuario_rol = $_SESSION['rol'] ?? 'usuario';
+$usuario_id = $_SESSION['user_id'] ?? null;
 
 // Obtener avatar del usuario si existe
 $avatar = null;
-if (isset($_SESSION['user_id'])) {
+if ($usuario_id) {
     $stmt = $conn->prepare("SELECT avatar FROM usuarios WHERE id = ?");
     if ($stmt) {
-        $stmt->bind_param("i", $_SESSION['user_id']);
+        $stmt->bind_param("i", $usuario_id);
         $stmt->execute();
         $result = $stmt->get_result();
         if ($row = $result->fetch_assoc()) {
@@ -37,7 +42,9 @@ if (isset($_SESSION['user_id'])) {
 
 // Determinar la página actual para el menú activo
 $current_page = basename($_SERVER['PHP_SELF']);
-$current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
+$current_path = $_SERVER['REQUEST_URI'];
+// Normalizar la ruta para detectar correctamente las secciones
+$current_path_normalized = str_replace('/asistencia-main/', '', $current_path);
 ?>
 
 <!-- Bootstrap CSS (solo se carga una vez) -->
@@ -90,7 +97,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
     flex-direction: column;
 }
 
-/* Sidebar collapsed (para móviles) */
+/* Sidebar collapsed (para escritorio) */
 .sidebar-custom.collapsed {
     width: var(--sidebar-width-collapsed);
 }
@@ -415,15 +422,6 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
     .sidebar-overlay.active {
         display: block;
     }
-    
-    /* Ajustes para móvil abierto */
-    .sidebar-custom.mobile-open.collapsed {
-        width: var(--sidebar-width-collapsed);
-    }
-    
-    .sidebar-custom.mobile-open:not(.collapsed) {
-        width: var(--sidebar-width);
-    }
 }
 
 /* Móviles pequeños */
@@ -489,6 +487,11 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
 .mobile-open {
     animation: slideIn 0.3s ease forwards;
 }
+
+.sidebar-overlay.active {
+    animation: fadeIn 0.3s ease forwards;
+}
+
 /* Contenedor del menú con scroll */
 .sidebar-menu {
     flex: 1;
@@ -504,9 +507,6 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
 .sidebar-menu::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,0.2);
     border-radius: 10px;
-}
-.sidebar-overlay.active {
-    animation: fadeIn 0.3s ease forwards;
 }
 </style>
 
@@ -538,7 +538,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
     <!-- PERFIL DE USUARIO -->
     <div class="user-profile">
         <div class="user-avatar">
-            <?php if ($avatar && file_exists("../uploads/avatars/" . $avatar)): ?>
+            <?php if ($avatar && file_exists(__DIR__ . "/../uploads/avatars/" . $avatar)): ?>
                 <img src="../uploads/avatars/<?= htmlspecialchars($avatar) ?>" alt="Avatar">
             <?php else: ?>
                 <?= strtoupper(substr($usuario_nombre, 0, 1)) ?>
@@ -548,7 +548,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
             <div class="user-name"><?= htmlspecialchars($usuario_nombre) ?></div>
             <div class="user-role">
                 <?php if ($usuario_rol === 'admin'): ?>
-                    <i class="bi bi-shield-fill-check me-1"></i> Admin
+                    <i class="bi bi-shield-fill-check me-1"></i> Administrador
                 <?php else: ?>
                     <i class="bi bi-person-fill me-1"></i> Usuario
                 <?php endif; ?>
@@ -584,11 +584,11 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
         </div>
         <ul class="nav flex-column">
             <?php if ($sidebar_sedes && $sidebar_sedes->num_rows > 0): ?>
-                <?php $sidebar_sedes->data_seek(0);; ?>
+                <?php $sidebar_sedes->data_seek(0); ?>
                 <?php while ($s = $sidebar_sedes->fetch_assoc()): ?>
                     <li class="nav-item">
                         <a href="/asistencia-main/sedes/ranking.php?sede=<?= $s['id'] ?>" 
-                           class="nav-link <?= strpos($current_path, 'sede=' . $s['id']) !== false ? 'active' : '' ?>"
+                           class="nav-link <?= (strpos($current_path_normalized, 'sede=' . $s['id']) !== false) ? 'active' : '' ?>"
                            data-tooltip="Ver ranking de <?= htmlspecialchars($s['nombre']) ?>">
                             <i class="bi bi-geo-alt-fill"></i>
                             <span><?= htmlspecialchars($s['nombre']) ?></span>
@@ -599,7 +599,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
                 <li class="nav-item">
                     <span class="nav-link text-muted" style="cursor: default;">
                         <i class="bi bi-exclamation-circle"></i>
-                        <span>No hay sedes</span>
+                        <span>No hay sedes activas</span>
                     </span>
                 </li>
             <?php endif; ?>
@@ -613,7 +613,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
         <ul class="nav flex-column">
             <li class="nav-item">
                 <a href="/asistencia-main/tienda/index.php" 
-                   class="nav-link <?= strpos($current_path, 'tienda') !== false ? 'active' : '' ?>"
+                   class="nav-link <?= (strpos($current_path_normalized, 'tienda') !== false) ? 'active' : '' ?>"
                    data-tooltip="Tienda de Recompensas">
                     <i class="bi bi-cart-fill"></i>
                     <span>Tienda</span>
@@ -621,7 +621,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
             </li>
             <li class="nav-item">
                 <a href="/asistencia-main/encuestas/disc.php" 
-                   class="nav-link <?= strpos($current_path, 'encuestas') !== false ? 'active' : '' ?>"
+                   class="nav-link <?= (strpos($current_path_normalized, 'encuestas') !== false) ? 'active' : '' ?>"
                    data-tooltip="Encuesta DISC">
                     <i class="bi bi-clipboard-data-fill"></i>
                     <span>Encuesta DISC</span>
@@ -629,7 +629,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
             </li>
             <li class="nav-item">
                 <a href="/asistencia-main/perfil/perfil.php" 
-                   class="nav-link <?= strpos($current_path, 'perfil') !== false ? 'active' : '' ?>"
+                   class="nav-link <?= (strpos($current_path_normalized, 'perfil') !== false) ? 'active' : '' ?>"
                    data-tooltip="Mi Perfil">
                     <i class="bi bi-person-badge-fill"></i>
                     <span>Mi Perfil</span>
@@ -646,7 +646,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
             <ul class="nav flex-column">
                 <li class="nav-item">
                     <a href="/asistencia-main/admin/usuarios.php" 
-                       class="nav-link <?= strpos($current_path, 'admin/usuarios') !== false ? 'active' : '' ?>"
+                       class="nav-link <?= (strpos($current_path_normalized, 'admin/usuarios') !== false) ? 'active' : '' ?>"
                        data-tooltip="Gestionar Usuarios">
                         <i class="bi bi-people-fill"></i>
                         <span>Usuarios</span>
@@ -654,7 +654,7 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
                 </li>
                 <li class="nav-item">
                     <a href="/asistencia-main/admin/sedes.php" 
-                       class="nav-link <?= strpos($current_path, 'admin/sedes') !== false ? 'active' : '' ?>"
+                       class="nav-link <?= (strpos($current_path_normalized, 'admin/sedes') !== false) ? 'active' : '' ?>"
                        data-tooltip="Gestionar Sedes">
                         <i class="bi bi-buildings-fill"></i>
                         <span>Sedes</span>
@@ -662,39 +662,47 @@ $current_path = str_replace('/asistencia-main/', '', $_SERVER['REQUEST_URI']);
                 </li>
                 <li class="nav-item">
                     <a href="/asistencia-main/admin/recompensas.php" 
-                       class="nav-link <?= strpos($current_path, 'admin/recompensas') !== false ? 'active' : '' ?>"
+                       class="nav-link <?= (strpos($current_path_normalized, 'admin/recompensas') !== false) ? 'active' : '' ?>"
                        data-tooltip="Gestionar Recompensas">
                         <i class="bi bi-gift-fill"></i>
                         <span>Recompensas</span>
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="/asistencia-main/admin/roles.php" 
+                       class="nav-link <?= (strpos($current_path_normalized, 'admin/roles') !== false) ? 'active' : '' ?>"
+                       data-tooltip="Gestionar Roles">
+                        <i class="bi bi-person-badge"></i>
+                        <span>Roles</span>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="/asistencia-main/admin/asistencias.php" 
-                       class="nav-link <?= strpos($current_path, 'admin/asistencias') !== false ? 'active' : '' ?>"
+                       class="nav-link <?= (strpos($current_path_normalized, 'admin/asistencias') !== false) ? 'active' : '' ?>"
                        data-tooltip="Ver Asistencias">
                         <i class="bi bi-calendar-check-fill"></i>
                         <span>Asistencias</span>
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="/asistencia-main/admin/horarios_por_rol.php" 
+                       class="nav-link <?= (strpos($current_path_normalized, 'horarios_por_rol') !== false) ? 'active' : '' ?>"
+                       data-tooltip="Configurar Horarios por Rol">
+                        <i class="bi bi-clock-history"></i>
+                        <span>Horarios por Rol</span>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="/asistencia-main/excel/importar.php" 
-                       class="nav-link <?= strpos($current_path, 'excel/importar') !== false ? 'active' : '' ?>"
+                       class="nav-link <?= (strpos($current_path_normalized, 'excel/importar') !== false) ? 'active' : '' ?>"
                        data-tooltip="Importar Excel">
                         <i class="bi bi-upload"></i>
                         <span>Importar Excel</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/asistencia-main/excel/exportar.php" 
-                       class="nav-link <?= strpos($current_path, 'excel/exportar') !== false ? 'active' : '' ?>"
-                       data-tooltip="Exportar Excel">
-                        <i class="bi bi-download"></i>
-                        <span>Exportar Excel</span>
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a href="/asistencia-main/admin/niveles.php" 
-                       class="nav-link <?= strpos($current_path, 'admin/niveles') !== false ? 'active' : '' ?>"
+                       class="nav-link <?= (strpos($current_path_normalized, 'admin/niveles') !== false) ? 'active' : '' ?>"
                        data-tooltip="Administrar Niveles">
                         <i class="bi bi-trophy-fill"></i>
                         <span>Niveles</span>
@@ -733,7 +741,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
     const overlay = document.getElementById('sidebarOverlay');
-    const isMobile = () => window.innerWidth <= 992;
+    
+    // Función para determinar si es móvil
+    function isMobile() {
+        return window.innerWidth <= 992;
+    }
     
     // Función para cerrar sidebar en móvil
     function closeSidebar() {
@@ -741,6 +753,7 @@ document.addEventListener('DOMContentLoaded', function() {
             sidebar.classList.remove('mobile-open');
             overlay.classList.remove('active');
             toggleBtn.innerHTML = '<i class="bi bi-list"></i>';
+            document.body.style.overflow = ''; // Restaurar scroll
         }
     }
     
@@ -750,36 +763,46 @@ document.addEventListener('DOMContentLoaded', function() {
             sidebar.classList.add('mobile-open');
             overlay.classList.add('active');
             toggleBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+            document.body.style.overflow = 'hidden'; // Prevenir scroll del body
         }
     }
     
     // Toggle sidebar
-    toggleBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        
-        if (isMobile()) {
-            // Modo móvil: abrir/cerrar
-            if (sidebar.classList.contains('mobile-open')) {
-                closeSidebar();
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            
+            if (isMobile()) {
+                // Modo móvil: abrir/cerrar
+                if (sidebar.classList.contains('mobile-open')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
             } else {
-                openSidebar();
+                // Modo desktop: colapsar/expandir
+                sidebar.classList.toggle('collapsed');
+                // Guardar preferencia en localStorage
+                try {
+                    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+                } catch(e) {
+                    console.log('localStorage no disponible');
+                }
             }
-        } else {
-            // Modo desktop: colapsar/expandir
-            sidebar.classList.toggle('collapsed');
-            // Guardar preferencia en localStorage
-            localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
-        }
-    });
+        });
+    }
     
     // Cerrar al hacer clic en overlay
-    overlay.addEventListener('click', closeSidebar);
+    if (overlay) {
+        overlay.addEventListener('click', closeSidebar);
+    }
     
     // Cerrar al hacer clic en un enlace (móvil)
     document.querySelectorAll('.sidebar-custom .nav-link').forEach(link => {
         link.addEventListener('click', function(e) {
-            if (isMobile() && !this.getAttribute('onclick')) {
-                closeSidebar();
+            if (isMobile() && !this.hasAttribute('onclick')) {
+                // Pequeño retraso para permitir la navegación
+                setTimeout(closeSidebar, 150);
             }
         });
     });
@@ -792,15 +815,20 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!isMobile()) {
                 // En desktop, restaurar estado guardado
                 sidebar.classList.remove('mobile-open');
-                overlay.classList.remove('active');
-                toggleBtn.innerHTML = '<i class="bi bi-list"></i>';
+                if (overlay) overlay.classList.remove('active');
+                if (toggleBtn) toggleBtn.innerHTML = '<i class="bi bi-list"></i>';
+                document.body.style.overflow = '';
                 
                 // Restaurar estado colapsado de localStorage
-                const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-                if (collapsed) {
-                    sidebar.classList.add('collapsed');
-                } else {
-                    sidebar.classList.remove('collapsed');
+                try {
+                    const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+                    if (collapsed) {
+                        sidebar.classList.add('collapsed');
+                    } else {
+                        sidebar.classList.remove('collapsed');
+                    }
+                } catch(e) {
+                    console.log('localStorage no disponible');
                 }
             } else {
                 // En móvil, asegurar que sidebar está cerrado
@@ -811,9 +839,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Cargar preferencia de sidebar colapsado en desktop
     if (!isMobile()) {
-        const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-        if (collapsed) {
-            sidebar.classList.add('collapsed');
+        try {
+            const collapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            if (collapsed) {
+                sidebar.classList.add('collapsed');
+            }
+        } catch(e) {
+            console.log('localStorage no disponible');
         }
     }
     
@@ -823,20 +855,37 @@ document.addEventListener('DOMContentLoaded', function() {
     
     navLinks.forEach(link => {
         const href = link.getAttribute('href');
-        if (href && currentPath.includes(href) && href !== '/asistencia-main/dashboard/index.php') {
-            link.classList.add('active');
+        if (href && href !== '#' && href !== '') {
+            // Si la URL actual contiene el href y no es el dashboard principal
+            if (currentPath.includes(href) && href !== '/asistencia-main/dashboard/index.php') {
+                link.classList.add('active');
+            }
         }
     });
     
-    // Asegurar que el dashboard no esté activo si estamos en otra página
+    // Manejo especial para el dashboard
     const dashboardLink = document.querySelector('a[href="/asistencia-main/dashboard/index.php"]');
-    if (dashboardLink && currentPath !== '/asistencia-main/dashboard/index.php' && !currentPath.includes('/dashboard/index.php')) {
-        dashboardLink.classList.remove('active');
+    if (dashboardLink) {
+        const isDashboard = currentPath === '/asistencia-main/dashboard/index.php' || 
+                           currentPath === '/asistencia-main/dashboard/' ||
+                           currentPath.includes('/dashboard/index.php');
+        if (isDashboard) {
+            dashboardLink.classList.add('active');
+        } else {
+            dashboardLink.classList.remove('active');
+        }
     }
 });
 
 // Prevenir que el sidebar se cierre al hacer clic dentro
 document.querySelector('.sidebar-custom')?.addEventListener('click', function(e) {
     e.stopPropagation();
+});
+
+// Manejar errores de localStorage
+window.addEventListener('error', function(e) {
+    if (e.message && e.message.includes('localStorage')) {
+        console.log('localStorage no disponible, ignorando...');
+    }
 });
 </script>

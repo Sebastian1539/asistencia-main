@@ -15,6 +15,9 @@ if (!$conn) {
 // Obtener sedes activas
 $sedes = $conn->query("SELECT id, nombre FROM sedes WHERE activo = 1 ORDER BY nombre");
 
+// Obtener roles personalizados
+$roles_personalizados = $conn->query("SELECT id, nombre FROM roles ORDER BY nombre");
+
 // Verificar si la consulta de sedes fue exitosa
 if (!$sedes) {
     die("Error en la consulta de sedes: " . $conn->error);
@@ -29,7 +32,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $codigo = isset($_POST["codigo"]) ? intval($_POST["codigo"]) : 0;
     $nombre = isset($_POST["nombre"]) ? trim($_POST["nombre"]) : "";
     $email = isset($_POST["email"]) ? trim($_POST["email"]) : "";
-    $rol = isset($_POST["rol"]) ? $_POST["rol"] : "usuario";
+    $tipo_rol = isset($_POST["tipo_rol"]) ? $_POST["tipo_rol"] : "sistema"; // 'sistema' o 'personalizado'
+    $rol_sistema = isset($_POST["rol_sistema"]) ? $_POST["rol_sistema"] : "usuario";
+    $rol_personalizado = isset($_POST["rol_personalizado"]) ? intval($_POST["rol_personalizado"]) : null;
     $sede = isset($_POST["sede_id"]) && $_POST["sede_id"] !== "" ? intval($_POST["sede_id"]) : null;
     $pass = isset($_POST["password"]) ? $_POST["password"] : "";
 
@@ -65,15 +70,26 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                         $hash = password_hash($pass, PASSWORD_BCRYPT);
 
+                        // Determinar qué rol asignar
+                        if ($tipo_rol === 'personalizado' && $rol_personalizado) {
+                            // Rol personalizado
+                            $rol = 'usuario'; // Por defecto, los roles personalizados son usuarios del sistema
+                            $rol_id = $rol_personalizado;
+                        } else {
+                            // Rol del sistema
+                            $rol = $rol_sistema;
+                            $rol_id = null;
+                        }
+
                         // Insertar usuario
                         $stmt = $conn->prepare("
                             INSERT INTO usuarios 
-                            (codigo_biometrico, nombre, email, password, rol, sede_id) 
-                            VALUES (?, ?, ?, ?, ?, ?)
+                            (codigo_biometrico, nombre, email, password, rol, rol_id, sede_id) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                         ");
 
                         if ($stmt) {
-                            $stmt->bind_param("issssi", $codigo, $nombre, $email, $hash, $rol, $sede);
+                            $stmt->bind_param("issssii", $codigo, $nombre, $email, $hash, $rol, $rol_id, $sede);
                             
                             if ($stmt->execute()) {
                                 $uid = $stmt->insert_id;
@@ -134,15 +150,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             background-color: #f8f9fc;
         }
         
-        .contenido {
+        .main-content {
             margin-left: 260px;
             padding: 30px;
             min-height: 100vh;
             background: linear-gradient(135deg, #f5f7fa 0%, #f8f9fc 100%);
         }
         
+        @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
+            }
+        }
+        
         .card-form {
-            max-width: 600px;
+            max-width: 650px;
             border: none;
             border-radius: 20px;
             background: rgba(255, 255, 255, 0.95);
@@ -213,6 +236,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             transform: translateY(0);
         }
         
+        .btn-outline-secondary {
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 0.875rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-outline-secondary:hover {
+            background: #e2e8f0;
+            border-color: #cbd5e0;
+            transform: translateY(-2px);
+        }
+        
         .alert {
             border-radius: 12px;
             border: none;
@@ -228,6 +265,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         .alert-success {
             background: linear-gradient(135deg, #9ae6b4 0%, #68d391 100%);
             color: #22543d;
+        }
+        
+        .alert-info {
+            background: linear-gradient(135deg, #bee3f8 0%, #90cdf4 100%);
+            color: #2c5282;
         }
         
         .text-muted-custom {
@@ -281,13 +323,47 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             padding-left: 2.5rem;
         }
         
-        .sedes-count {
-            background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+        .rol-option {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .rol-option:hover {
+            border-color: #667eea;
+            background: white;
+        }
+        
+        .rol-option.selected {
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+        }
+        
+        .rol-option input[type="radio"] {
+            display: none;
+        }
+        
+        .rol-badge-sistema {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
             color: white;
-            border-radius: 20px;
-            padding: 0.2rem 0.8rem;
-            font-size: 0.8rem;
-            margin-left: 0.5rem;
+            padding: 3px 8px;
+            border-radius: 15px;
+            font-size: 0.7rem;
+            margin-left: 10px;
+        }
+        
+        .rol-badge-personalizado {
+            background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 15px;
+            font-size: 0.7rem;
+            margin-left: 10px;
         }
     </style>
 </head>
@@ -296,7 +372,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <?php include(__DIR__ . "/../dashboard/sidebar.php"); ?>
 
 <main class="main-content">
-    <div class="container-fluid px-4">
+    <div class="container-fluid px-lg-4">
         <!-- Encabezado -->
         <div class="d-flex align-items-center justify-content-between mb-4">
             <h3 class="page-title">
@@ -337,7 +413,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     </div>
                 <?php endif; ?>
 
-                <form method="POST" class="needs-validation" novalidate>
+                <form method="POST" class="needs-validation" novalidate id="formUsuario">
                     <!-- Fila de código biométrico -->
                     <div class="mb-4">
                         <label class="form-label d-flex align-items-center">
@@ -352,7 +428,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                    class="form-control" 
                                    required 
                                    placeholder="Ej: 123456"
-                                   min="1">
+                                   min="1"
+                                   value="<?= isset($_POST['codigo']) ? htmlspecialchars($_POST['codigo']) : '' ?>">
                         </div>
                         <small class="text-muted-custom">
                             <i class="bi bi-info-circle me-1"></i>
@@ -375,7 +452,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                    required 
                                    placeholder="Ej: Juan Pérez García"
                                    pattern="[A-Za-zÁáÉéÍíÓóÚúÑñ\s]+"
-                                   title="Solo letras y espacios">
+                                   title="Solo letras y espacios"
+                                   value="<?= isset($_POST['nombre']) ? htmlspecialchars($_POST['nombre']) : '' ?>">
                         </div>
                     </div>
 
@@ -392,7 +470,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                                    name="email" 
                                    class="form-control" 
                                    required 
-                                   placeholder="ejemplo@correo.com">
+                                   placeholder="ejemplo@correo.com"
+                                   value="<?= isset($_POST['email']) ? htmlspecialchars($_POST['email']) : '' ?>">
                         </div>
                     </div>
 
@@ -427,25 +506,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         <select name="sede_id" class="form-select">
                             <option value="" selected>Seleccione una sede...</option>
                             <?php 
-                            $sedes->data_seek(0); // Reiniciar el puntero del resultado
-                            $sedesCount = 0;
-                            while($s = $sedes->fetch_assoc()): 
-                                $sedesCount++;
+                            if ($sedes && $sedes->num_rows > 0) {
+                                $sedes->data_seek(0);
+                                $sedesCount = 0;
+                                while($s = $sedes->fetch_assoc()): 
+                                    $sedesCount++;
+                                    $selected = (isset($_POST['sede_id']) && $_POST['sede_id'] == $s['id']) ? 'selected' : '';
                             ?>
-                                <option value="<?= $s['id'] ?>" class="py-2">
+                                <option value="<?= $s['id'] ?>" <?= $selected ?> class="py-2">
                                     <i class="bi bi-building me-2"></i>
                                     <?= htmlspecialchars($s['nombre']) ?>
                                 </option>
-                            <?php endwhile; ?>
-                            
-                            <?php if ($sedesCount === 0): ?>
-                                <option value="" disabled class="text-warning">
-                                    ⚠️ No hay sedes activas disponibles
-                                </option>
-                            <?php endif; ?>
+                            <?php 
+                                endwhile;
+                            } 
+                            ?>
                         </select>
                         
-                        <?php if ($sedesCount > 0): ?>
+                        <?php if (isset($sedesCount) && $sedesCount > 0): ?>
                             <small class="text-muted-custom">
                                 <i class="bi bi-diagram-3 me-1"></i>
                                 <?= $sedesCount ?> sede(s) activa(s) disponible(s)
@@ -459,20 +537,62 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         <?php endif; ?>
                     </div>
 
-                    <!-- Fila de rol -->
+                    <!-- Selección de Tipo de Rol -->
                     <div class="mb-4">
                         <label class="form-label d-flex align-items-center">
                             <i class="bi bi-shield me-2" style="color: #667eea;"></i>
-                            Rol del Usuario
+                            Tipo de Rol
                             <span class="badge-required">*</span>
                         </label>
-                        <select name="rol" class="form-select" required>
-                            <option value="usuario" selected class="py-2">
-                                <i class="bi bi-person me-2"></i>
+                        
+                        <div class="row g-3">
+                            <!-- Opción: Rol del sistema -->
+                            <div class="col-md-6">
+                                <div class="rol-option <?= (!isset($_POST['tipo_rol']) || $_POST['tipo_rol'] === 'sistema') ? 'selected' : '' ?>" 
+                                     onclick="document.getElementById('tipo_sistema').checked = true; mostrarOpcionesSistema()">
+                                    <input type="radio" name="tipo_rol" id="tipo_sistema" value="sistema" 
+                                           <?= (!isset($_POST['tipo_rol']) || $_POST['tipo_rol'] === 'sistema') ? 'checked' : '' ?> style="display: none;">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-gear fs-4 me-3" style="color: #667eea;"></i>
+                                        <div>
+                                            <h6 class="mb-1">Rol del Sistema</h6>
+                                            <small class="text-muted">Administrador o Usuario básico</small>
+                                        </div>
+                                        <span class="rol-badge-sistema ms-auto">SISTEMA</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Opción: Rol personalizado -->
+                            <div class="col-md-6">
+                                <div class="rol-option <?= (isset($_POST['tipo_rol']) && $_POST['tipo_rol'] === 'personalizado') ? 'selected' : '' ?>" 
+                                     onclick="document.getElementById('tipo_personalizado').checked = true; mostrarOpcionesPersonalizado()">
+                                    <input type="radio" name="tipo_rol" id="tipo_personalizado" value="personalizado" 
+                                           <?= (isset($_POST['tipo_rol']) && $_POST['tipo_rol'] === 'personalizado') ? 'checked' : '' ?> style="display: none;">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-star fs-4 me-3" style="color: #9f7aea;"></i>
+                                        <div>
+                                            <h6 class="mb-1">Rol Personalizado</h6>
+                                            <small class="text-muted">Roles creados a medida</small>
+                                        </div>
+                                        <span class="rol-badge-personalizado ms-auto">PERSONALIZADO</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Opciones de Rol del Sistema (visible por defecto) -->
+                    <div class="mb-4" id="opcionesSistema" style="display: block;">
+                        <label class="form-label d-flex align-items-center">
+                            <i class="bi bi-shield me-2" style="color: #667eea;"></i>
+                            Seleccionar Rol del Sistema
+                        </label>
+                        <select name="rol_sistema" class="form-select">
+                            <option value="usuario" <?= (isset($_POST['rol_sistema']) && $_POST['rol_sistema'] === 'usuario') ? 'selected' : '' ?>>
                                 👤 Usuario - Acceso básico al sistema
                             </option>
-                            <option value="admin" class="py-2">
-                                <i class="bi bi-shield-lock me-2"></i>
+                            <option value="admin" <?= (isset($_POST['rol_sistema']) && $_POST['rol_sistema'] === 'admin') ? 'selected' : '' ?>>
                                 🔐 Administrador - Acceso completo
                             </option>
                         </select>
@@ -482,6 +602,43 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         </small>
                     </div>
 
+                    <!-- Opciones de Rol Personalizado (oculto por defecto) -->
+                    <div class="mb-4" id="opcionesPersonalizado" style="display: none;">
+                        <label class="form-label d-flex align-items-center">
+                            <i class="bi bi-star me-2" style="color: #9f7aea;"></i>
+                            Seleccionar Rol Personalizado
+                        </label>
+                        <select name="rol_personalizado" class="form-select">
+                            <option value="">Seleccione un rol personalizado...</option>
+                            <?php 
+                            if ($roles_personalizados && $roles_personalizados->num_rows > 0) {
+                                $roles_personalizados->data_seek(0);
+                                while($r = $roles_personalizados->fetch_assoc()): 
+                                    $selected = (isset($_POST['rol_personalizado']) && $_POST['rol_personalizado'] == $r['id']) ? 'selected' : '';
+                            ?>
+                                <option value="<?= $r['id'] ?>" <?= $selected ?>>
+                                    ⭐ <?= htmlspecialchars($r['nombre']) ?>
+                                </option>
+                            <?php 
+                                endwhile;
+                            } else {
+                            ?>
+                                <option value="" disabled>No hay roles personalizados creados</option>
+                            <?php } ?>
+                        </select>
+                        <small class="text-muted-custom">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Los roles personalizados tienen horarios específicos configurados
+                        </small>
+                        <?php if (!$roles_personalizados || $roles_personalizados->num_rows === 0): ?>
+                            <div class="alert alert-warning mt-2 py-2 small">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                No hay roles personalizados. 
+                                <a href="roles.php" class="alert-link">Crear rol personalizado</a>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
                     <!-- Botones de acción -->
                     <div class="d-grid gap-3 mt-5">
                         <button type="submit" class="btn btn-success btn-lg">
@@ -489,7 +646,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                             Guardar Trabajador
                         </button>
                         
-                        <button type="reset" class="btn btn-outline-secondary rounded-pill">
+                        <button type="reset" class="btn btn-outline-secondary rounded-pill" onclick="resetFormulario()">
                             <i class="bi bi-eraser me-2"></i>
                             Limpiar formulario
                         </button>
@@ -507,6 +664,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                             <ul class="small text-secondary mb-0 ps-3">
                                 <li>El código biométrico debe ser único en el sistema</li>
                                 <li>Los puntos iniciales se asignan automáticamente (0 puntos)</li>
+                                <li>Los roles personalizados tienen sus propios horarios de entrada/salida</li>
                                 <li>Puede asignar una sede más tarde desde editar usuario</li>
                             </ul>
                         </div>
@@ -534,11 +692,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             const nombre = form.querySelector('[name="nombre"]');
             const email = form.querySelector('[name="email"]');
             const password = form.querySelector('[name="password"]');
+            const tipoRol = document.querySelector('input[name="tipo_rol"]:checked');
             
             let isValid = true;
             
             // Validar código biométrico
-            if (codigo.value <= 0 || isNaN(codigo.value)) {
+            if (!codigo.value || codigo.value <= 0 || isNaN(codigo.value)) {
                 codigo.classList.add('is-invalid');
                 isValid = false;
             } else {
@@ -571,6 +730,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 password.classList.remove('is-invalid');
             }
             
+            // Validar que se haya seleccionado un tipo de rol
+            if (!tipoRol) {
+                alert('Debe seleccionar un tipo de rol');
+                isValid = false;
+            }
+            
+            // Si es rol personalizado, validar que se haya seleccionado uno
+            if (tipoRol && tipoRol.value === 'personalizado') {
+                const rolPersonalizado = document.querySelector('[name="rol_personalizado"]');
+                if (!rolPersonalizado.value) {
+                    alert('Debe seleccionar un rol personalizado');
+                    isValid = false;
+                }
+            }
+            
             if (!form.checkValidity() || !isValid) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -580,7 +754,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }, false);
     });
     
-    // Mostrar/ocultar contraseña (opcional)
+    // Mostrar/ocultar contraseña
     const togglePassword = document.createElement('button');
     togglePassword.type = 'button';
     togglePassword.className = 'btn btn-outline-secondary position-absolute end-0 top-50 translate-middle-y me-2';
@@ -601,6 +775,42 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         });
     }
 })();
+
+// Función para mostrar opciones de rol del sistema
+function mostrarOpcionesSistema() {
+    document.getElementById('opcionesSistema').style.display = 'block';
+    document.getElementById('opcionesPersonalizado').style.display = 'none';
+    
+    // Actualizar estilo visual
+    document.querySelectorAll('.rol-option').forEach(opt => opt.classList.remove('selected'));
+    document.querySelector('.rol-option:has(#tipo_sistema)').classList.add('selected');
+}
+
+// Función para mostrar opciones de rol personalizado
+function mostrarOpcionesPersonalizado() {
+    document.getElementById('opcionesSistema').style.display = 'none';
+    document.getElementById('opcionesPersonalizado').style.display = 'block';
+    
+    // Actualizar estilo visual
+    document.querySelectorAll('.rol-option').forEach(opt => opt.classList.remove('selected'));
+    document.querySelector('.rol-option:has(#tipo_personalizado)').classList.add('selected');
+}
+
+// Inicializar según selección previa
+document.addEventListener('DOMContentLoaded', function() {
+    const tipoPersonalizado = document.getElementById('tipo_personalizado');
+    if (tipoPersonalizado && tipoPersonalizado.checked) {
+        mostrarOpcionesPersonalizado();
+    } else {
+        mostrarOpcionesSistema();
+    }
+});
+
+// Función para resetear formulario
+function resetFormulario() {
+    document.getElementById('formUsuario').reset();
+    mostrarOpcionesSistema();
+}
 </script>
 
 </body>
